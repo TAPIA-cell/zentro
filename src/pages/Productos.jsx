@@ -1,55 +1,120 @@
-import React, { useState, useEffect, useContext } from "react";
-import { Link } from "react-router-dom";
+import React, { useState, useEffect, useContext, useMemo } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { CartContext } from "../context/CartContext.jsx";
 import { AuthContext } from "../context/AuthContext.jsx";
-import { cargarProductos } from "../utils/cargarProductos";
+
+// Toast bonito y mejorado
+const Toast = ({ mensaje, onClose }) => (
+  <div className="toast-container position-fixed bottom-0 end-0 p-4" style={{ zIndex: 2000 }}>
+    <div className="toast show text-white bg-success shadow-lg">
+      <div className="toast-body d-flex justify-content-between align-items-center">
+        <span>{mensaje}</span>
+        <button className="btn-close btn-close-white" onClick={onClose}></button>
+      </div>
+    </div>
+  </div>
+);
 
 function Productos() {
   const [productos, setProductos] = useState([]);
   const [busqueda, setBusqueda] = useState("");
   const [orden, setOrden] = useState("default");
-  const { agregarAlCarrito } = useContext(CartContext);
-  const { usuario } = useContext(AuthContext);
+  const [cargando, setCargando] = useState(true);
+  const [mensajeToast, setMensajeToast] = useState(null);
 
+  const { agregarAlCarrito } = useContext(CartContext);
+  const { isLogged } = useContext(AuthContext);
+  const navigate = useNavigate();
+
+  const BACKEND_URL = import.meta.env.VITE_API_URL || "http://localhost:3000/api";
+  const BASE_URL = BACKEND_URL.replace("/api", "");
+
+  // ======================================================
+  // 🔧 Resolver URLs de imágenes (100% seguro)
+  // ======================================================
+  const resolverURL = (img) => {
+    if (!img) return "/img/placeholder.jpg";
+
+    if (img.startsWith("http")) return img;
+    if (img.startsWith("/img/")) return BASE_URL + img;
+    if (img.startsWith("img/")) return BASE_URL + "/" + img;
+
+    const limpio = img
+      .replace("backend/public/", "")
+      .replace("public/", "")
+      .replace(/^\/+/, "");
+
+    return BASE_URL + "/img/" + limpio;
+  };
+
+  // ======================================================
+  // CARGAR PRODUCTOS
+  // ======================================================
   useEffect(() => {
-    const actualizar = () => setProductos(cargarProductos());
-    actualizar();
-    window.addEventListener("storage", actualizar);
-    return () => window.removeEventListener("storage", actualizar);
+    setCargando(true);
+    fetch(`${BACKEND_URL}/productos`)
+      .then((res) => res.json())
+      .then((data) => {
+        setProductos(Array.isArray(data) ? data : []);
+      })
+      .catch((err) => console.error("Error cargando catálogo:", err))
+      .finally(() => setCargando(false));
   }, []);
 
-  // ✅ MODIFICACIÓN CLAVE: Quitamos el filtro de stock > 0
-  const filtrarProductos = () => {
+  // ======================================================
+  // FILTRO + ORDENAMIENTO
+  // ======================================================
+  const productosFiltrados = useMemo(() => {
     let resultado = productos.filter((p) =>
-      // Solo filtramos por búsqueda (y asumimos que la propiedad p.stock existe en todos)
       p.nombre.toLowerCase().includes(busqueda.toLowerCase())
     );
 
-    // 2. Ordenar
-    if (orden === "precioAsc") resultado.sort((a, b) => a.precio - b.precio);
-    if (orden === "precioDesc") resultado.sort((a, b) => b.precio - a.precio);
+    if (orden === "precioAsc") {
+      resultado.sort((a, b) => a.precio - b.precio);
+    } else if (orden === "precioDesc") {
+      resultado.sort((a, b) => b.precio - a.precio);
+    }
 
     return resultado;
+  }, [productos, busqueda, orden]);
+
+  // ======================================================
+  // MANEJAR AGREGAR AL CARRITO
+  // ======================================================
+  const handleAgregar = (producto) => {
+    if (!isLogged()) {
+      if (window.confirm("🔒 Debes iniciar sesión para comprar. ¿Ir al login?")) {
+        navigate("/login");
+      }
+      return;
+    }
+
+    agregarAlCarrito(producto);
+
+    setMensajeToast(`🛒 ${producto.nombre} fue agregado al carrito`);
+    setTimeout(() => setMensajeToast(null), 3000);
   };
-  // ----------------------------------------------------
 
-  const productosFiltrados = filtrarProductos();
-
+  // ======================================================
+  // RENDER
+  // ======================================================
   return (
-    <div className="container my-5">
-      <h2 className="fw-bold text-center mb-4">Nuestros Productos</h2>
+    <div className="container my-5 position-relative">
+      <h2 className="fw-bold text-center mb-4">✨ Nuestros Productos ✨</h2>
 
-      <div className="row mb-4 align-items-center">
-        <div className="col-md-6 mb-2 mb-md-0">
+      {/* Buscador + Orden */}
+      <div className="row mb-4 align-items-center bg-white p-3 rounded shadow-sm border">
+        <div className="col-md-6">
           <input
             type="text"
             className="form-control"
-            placeholder="Buscar producto..."
+            placeholder="🔍 Buscar figuras, katanas, accesorios..."
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
           />
         </div>
-        <div className="col-md-6 text-md-end">
+
+        <div className="col-md-6 text-md-end mt-3 mt-md-0">
           <select
             className="form-select w-auto d-inline"
             value={orden}
@@ -62,82 +127,105 @@ function Productos() {
         </div>
       </div>
 
-      <div className="row g-4">
-        {productosFiltrados.length === 0 ? (
-          <p className="text-center text-muted">
-            No se encontraron productos que coincidan con la búsqueda.
-          </p>
-        ) : (
-          productosFiltrados.map((p) => {
-            // Determinamos si hay stock (asumimos que si no está definido, es 0)
-            const hayStock = p.stock > 0;
-            
-            return (
-              <div className="col-sm-6 col-md-4 col-lg-3" key={p.id}>
-                <div className="card h-100 shadow-sm border-0">
-                  <img
-                    src={
-                      p.imagenes && p.imagenes[0]
-                        ? p.imagenes[0]
-                        : "/img/placeholder.jpg"
-                    }
-                    alt={p.nombre}
-                    className="card-img-top"
-                    style={{
-                      height: "220px",
-                      objectFit: "contain",
-                      backgroundColor: "#f8f9fa",
-                      padding: "10px",
-                      // Estilo para indicar que está agotado, manteniendo la imagen visible
-                      opacity: hayStock ? 1 : 0.7, 
-                    }}
-                  />
-                  <div className="card-body d-flex flex-column text-center">
-                    <h6 className="card-title fw-bold">{p.nombre}</h6>
-                    <p className="text-success fw-semibold mb-2">
-                      ${p.precio.toLocaleString("es-CL")}
-                    </p>
+      {/* Loader */}
+      {cargando ? (
+        <div className="text-center py-5">
+          <div className="spinner-border text-primary" role="status"></div>
+          <p className="mt-2 text-muted">Cargando catálogo...</p>
+        </div>
+      ) : (
+        <div className="row g-4">
+          {productosFiltrados.length === 0 ? (
+            <div className="col-12 text-center text-muted py-5">
+              <h4 className="mb-3">😕</h4>
+              No encontramos productos que coincidan con tu búsqueda.
+            </div>
+          ) : (
+            productosFiltrados.map((p) => {
+              const hayStock = p.stock > 0;
+              const imagenPrincipal =
+                p.imagenes && p.imagenes.length > 0
+                  ? resolverURL(p.imagenes[0])
+                  : "/img/placeholder.jpg";
 
-                    <div className="mt-auto">
-                      <Link
-                        to={`/producto/${p.id}`}
-                        className="btn btn-outline-primary btn-sm me-2"
-                      >
-                        Ver
-                      </Link>
-                      
-                      {/* ✅ LÓGICA CONDICIONAL DE STOCK */}
-                      {hayStock ? (
+              return (
+                <div className="col-sm-6 col-md-4 col-lg-3" key={p.id}>
+                  <div className="card h-100 border-0 shadow-sm product-card rounded-3 overflow-hidden">
+
+                    {/* Badge AGOTADO */}
+                    {!hayStock && (
+                      <span className="badge bg-danger position-absolute top-0 end-0 m-2 shadow">
+                        AGOTADO
+                      </span>
+                    )}
+
+                    {/* Imagen */}
+                    <div className="product-img-container">
+                      <img
+                        src={imagenPrincipal}
+                        alt={p.nombre}
+                        className="product-img"
+                        onError={(e) => (e.target.src = "/img/placeholder.jpg")}
+                      />
+                    </div>
+
+                    <div className="card-body text-center d-flex flex-column">
+                      <h6 className="fw-bold text-truncate" title={p.nombre}>
+                        {p.nombre}
+                      </h6>
+
+                      <p className="text-primary fw-bold fs-5 mb-2">
+                        ${Number(p.precio).toLocaleString("es-CL")}
+                      </p>
+
+                      <div className="mt-auto">
+                        <Link to={`/producto/${p.id}`} className="btn btn-outline-secondary btn-sm me-2">
+                          Ver Detalle
+                        </Link>
+
                         <button
-                          className="btn btn-dark btn-sm"
-                          onClick={() => {
-                            if (!usuario) {
-                              alert(
-                                "⚠️ Debes iniciar sesión para agregar productos al carrito."
-                              );
-                              return;
-                            }
-                            agregarAlCarrito(p);
-                            alert("✅ Producto agregado al carrito.");
-                          }}
+                          className={`btn btn-sm ${hayStock ? "btn-dark" : "btn-light text-muted border"}`}
+                          disabled={!hayStock}
+                          onClick={() => handleAgregar(p)}
                         >
-                          🛒 Agregar
+                          {hayStock ? "🛒 Agregar" : "Sin Stock"}
                         </button>
-                      ) : (
-                        <button className="btn btn-danger btn-sm disabled" disabled>
-                            🚫 Sin Stock
-                        </button>
-                      )}
-                      {/* ---------------------------------- */}
-                      
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            );
-          })
-        )}
-      </div>
+              );
+            })
+          )}
+        </div>
+      )}
+
+      {/* Toast */}
+      {mensajeToast && (
+        <Toast mensaje={mensajeToast} onClose={() => setMensajeToast(null)} />
+      )}
+
+      {/* Estilos mejorados */}
+      <style>{`
+        .product-img-container {
+          height: 230px;
+          background: #fff;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          overflow: hidden;
+          position: relative;
+        }
+        .product-img {
+          height: 100%;
+          width: 100%;
+          object-fit: contain;
+          transition: transform .3s ease;
+        }
+        .product-card:hover .product-img {
+          transform: scale(1.05);
+        }
+      `}</style>
     </div>
   );
 }

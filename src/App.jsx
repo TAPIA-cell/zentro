@@ -1,27 +1,31 @@
 import { Routes, Route } from "react-router-dom";
 import Navbar from "./components/organisms/Navbar";
 import FooterInfo from "./components/molecules/FooterInfo";
+
 import ProtectedRoute from "./components/ProtectedRoute";
+import AdminRoute from "./components/AdminRoute";
 
 // Páginas públicas
 import Home from "./pages/Home";
 import Productos from "./pages/Productos";
 import Nosotros from "./pages/Nosotros";
 import Blogs from "./pages/Blogs";
-import BlogDetalle from "./pages/BlogsDetalle";
+import BlogDetalle from "./pages/BlogsDetalle";  // ✅ NOMBRE CORREGIDO
 import Contacto from "./pages/Contacto";
 import Cart from "./pages/Cart";
-import Checkout from "./pages/Checkout"; // ✅ NUEVO
+import Checkout from "./pages/Checkout";
 import Login from "./pages/Login";
 import Register from "./pages/Registro";
 import DetalleProducto from "./pages/DetalleProducto";
+import Perfil from "./pages/Perfil";
 
-// Páginas de administrador
+
+// Admin
 import AdminHome from "./pages/AdminHome";
 import AdminUsuarios from "./pages/AdminUsuarios";
 import AdminProductos from "./pages/AdminProductos";
 import AdminBlogs from "./pages/AdminBlogs";
-import AdminVentas from "./pages/AdminVentas"; // ✅ Nuevo import
+import AdminVentas from "./pages/AdminVentas";
 
 function App() {
   return (
@@ -29,62 +33,38 @@ function App() {
       <Navbar />
       <main className="flex-grow-1">
         <Routes>
-          {/* 🔹 Rutas públicas */}
+
+          {/* Públicas */}
           <Route path="/" element={<Home />} />
           <Route path="/productos" element={<Productos />} />
           <Route path="/producto/:id" element={<DetalleProducto />} />
           <Route path="/nosotros" element={<Nosotros />} />
           <Route path="/blogs" element={<Blogs />} />
-          <Route path="/blogs/:id" element={<BlogDetalle />} />
+          <Route path="/blogs/:id" element={<BlogDetalle />} /> {/* ✔ RUTA CORRECTA */}
           <Route path="/contacto" element={<Contacto />} />
           <Route path="/carrito" element={<Cart />} />
-          <Route path="/checkout" element={<Checkout />} /> {/* ✅ NUEVA RUTA */}
+          <Route path="/checkout" element={<Checkout />} />
           <Route path="/login" element={<Login />} />
           <Route path="/registro" element={<Register />} />
 
-          {/* 🔐 Rutas protegidas para administrador */}
-          <Route
-            path="/admin"
-            element={
-              <ProtectedRoute role="Admin">
-                <AdminHome />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/usuarios"
-            element={
-              <ProtectedRoute role="Admin">
-                <AdminUsuarios />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/productos"
-            element={
-              <ProtectedRoute role="Admin">
-                <AdminProductos />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/blogs"
-            element={
-              <ProtectedRoute role="Admin">
-                <AdminBlogs />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/ventas"
-            element={
-              <ProtectedRoute role="Admin">
-                <AdminVentas />
-              </ProtectedRoute>
-            }
-          />
+
+          {/* Protegidas */}
+          <Route path="/perfil" element={
+            <ProtectedRoute>
+              <Perfil />
+            </ProtectedRoute>
+          }/>
+
+          {/* Admin */}
+          <Route path="/admin" element={<AdminRoute><AdminHome /></AdminRoute>} />
+          <Route path="/admin/usuarios" element={<AdminRoute><AdminUsuarios /></AdminRoute>} />
+          <Route path="/admin/productos" element={<AdminRoute><AdminProductos /></AdminRoute>} />
+          <Route path="/admin/blogs" element={<AdminRoute><AdminBlogs /></AdminRoute>} />
+          <Route path="/admin/ventas" element={<AdminRoute><AdminVentas /></AdminRoute>} />
+
         </Routes>
       </main>
+
       <FooterInfo />
     </div>
   );

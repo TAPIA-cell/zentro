@@ -1,79 +1,112 @@
-import { createContext, useState, useEffect } from "react";
+import { createContext, useState, useEffect, useContext } from "react";
+import { AuthContext } from "./AuthContext.jsx";
 
 export const CartContext = createContext();
 
 export function CartProvider({ children }) {
+  const { token } = useContext(AuthContext);
   const [carrito, setCarrito] = useState([]);
 
-  // ✅ Cargar carrito desde localStorage al iniciar
+  const API = "http://13.217.74.250:3000/api/carrito";
+
+  // ==========================================================
+  // 🟢 Cargar carrito desde AWS
+  // ==========================================================
+  const cargarCarrito = async () => {
+    if (!token) return;
+
+    try {
+      const res = await fetch(API, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const data = await res.json();
+
+      // Seguridad: si backend manda algo raro -> lo ignoramos
+      setCarrito(Array.isArray(data) ? data : []);
+
+    } catch (err) {
+      console.error("❌ Error cargando carrito:", err);
+    }
+  };
+
   useEffect(() => {
-    const guardado = JSON.parse(localStorage.getItem("carrito")) || [];
-    setCarrito(guardado);
-  }, []);
+    cargarCarrito();
+  }, [token]);
 
-  // ✅ Guardar carrito cada vez que cambia
-  useEffect(() => {
-    localStorage.setItem("carrito", JSON.stringify(carrito));
-  }, [carrito]);
+  // ==========================================================
+  // 🟢 Agregar o actualizar cantidad
+  // ==========================================================
+  const agregarAlCarrito = async (producto) => {
+    try {
+      const body = {
+        id_producto: producto.id,
+        cantidad: Number(producto.cantidad) || 1,
+      };
 
-  // ✅ Agregar o actualizar producto con límite de stock
-  const agregarAlCarrito = (producto, actualizar = false) => {
-    setCarrito((prev) => {
-      const existente = prev.find((p) => p.id === producto.id);
+      await fetch(API, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
 
-      if (existente) {
-        // Si es una actualización directa (sumar/restar)
-        if (actualizar) {
-          if (producto.cantidad > producto.stock) {
-            alert(`Solo hay ${producto.stock} unidades disponibles.`);
-            return prev;
-          }
-          if (producto.cantidad <= 0) {
-            return prev.filter((p) => p.id !== producto.id);
-          }
-          return prev.map((p) =>
-            p.id === producto.id ? { ...p, cantidad: producto.cantidad } : p
-          );
-        }
+      await cargarCarrito();
 
-        // Si es un agregado incremental normal (+1)
-        const nuevaCantidad = (existente.cantidad || 1) + (producto.cantidad || 1);
+    } catch (err) {
+      console.error("❌ Error actualizando carrito:", err);
+    }
+  };
 
-        if (nuevaCantidad > (producto.stock ?? existente.stock ?? 0)) {
-          alert(`Solo hay ${producto.stock ?? existente.stock ?? 0} unidades disponibles.`);
-          return prev;
-        }
+  // ==========================================================
+  // 🟢 Eliminar un item del carrito
+  // ==========================================================
+  const eliminarDelCarrito = async (cartItemId) => {
+    try {
+      await fetch(`${API}/${cartItemId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
-        return prev.map((p) =>
-          p.id === producto.id ? { ...p, cantidad: nuevaCantidad } : p
-        );
-      } else {
-        // ✅ No permitir agregar si no hay stock
-        if (producto.stock <= 0) {
-          alert("Producto sin stock disponible.");
-          return prev;
-        }
+      setCarrito((prev) => prev.filter((p) => p.cartItemId !== cartItemId));
 
-        return [...prev, { ...producto, cantidad: producto.cantidad || 1 }];
+    } catch (err) {
+      console.error("❌ Error eliminando item:", err);
+    }
+  };
+
+  // ==========================================================
+  // 🟢 Vaciar carrito completo (AWS seguro)
+  // ==========================================================
+  const vaciarCarrito = async () => {
+    try {
+      const copia = [...carrito];
+
+      for (const item of copia) {
+        await fetch(`${API}/${item.cartItemId}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        });
       }
-    });
+
+      setCarrito([]);
+    } catch (err) {
+      console.error("❌ Error vaciando carrito:", err);
+    }
   };
 
-  // ✅ Eliminar producto por ID
-  const eliminarDelCarrito = (id) => {
-    setCarrito((prev) => prev.filter((p) => p.id !== id));
-  };
+  // ==========================================================
+  // 🟢 Totales (fix: convertir strings -> número)
+  // ==========================================================
+  const totalItems = carrito.reduce(
+    (acc, p) => acc + Number(p.cantidad || 0),
+    0
+  );
 
-  // ✅ Vaciar todo el carrito
-  const vaciarCarrito = () => {
-    setCarrito([]);
-    localStorage.removeItem("carrito");
-  };
-
-  // ✅ Totales
-  const totalItems = carrito.reduce((acc, p) => acc + (p.cantidad || 1), 0);
   const total = carrito.reduce(
-    (acc, p) => acc + (p.precio || 0) * (p.cantidad || 1),
+    (acc, p) => acc + (Number(p.precio) || 0) * (Number(p.cantidad) || 1),
     0
   );
 
@@ -84,8 +117,8 @@ export function CartProvider({ children }) {
         agregarAlCarrito,
         eliminarDelCarrito,
         vaciarCarrito,
-        total,
         totalItems,
+        total,
       }}
     >
       {children}

@@ -1,6 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useContext } from "react";
+import { AuthContext } from "../context/AuthContext.jsx";
 
 function AdminUsuarios() {
+  const { token } = useContext(AuthContext);
+
+  // URL desde .env o fallback
+  const BACKEND_URL = import.meta.env.VITE_API_URL || "http://localhost:3000/api";
+
   const [usuarios, setUsuarios] = useState([]);
   const [modoEdicion, setModoEdicion] = useState(false);
   const [usuarioActual, setUsuarioActual] = useState({
@@ -11,33 +17,35 @@ function AdminUsuarios() {
     password: "",
   });
 
-  // 🔹 Cargar usuarios desde localStorage (sin borrar los existentes)
-  const cargarUsuarios = () => {
-    const lista = JSON.parse(localStorage.getItem("usuarios")) || [];
-    setUsuarios(lista);
+  // ==========================================================
+  // 📥 CARGAR USUARIOS DESDE AWS
+  // ==========================================================
+  const cargarUsuarios = async () => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/usuarios`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (!res.ok) {
+        console.error("❌ Error de autenticación o permisos");
+        return;
+      }
+
+      const data = await res.json();
+      setUsuarios(data);
+    } catch (error) {
+      console.error("Error cargando usuarios:", error);
+    }
   };
 
   useEffect(() => {
-    cargarUsuarios();
+    if (token) cargarUsuarios();
+  }, [token]);
 
-    // 🔁 Escuchar evento de actualización de usuarios (disparado desde Registro.jsx)
-    const actualizar = () => cargarUsuarios();
-    window.addEventListener("usuariosActualizados", actualizar);
-
-    // 🔁 También escucha cambios de localStorage (p. ej., en otra pestaña)
-    const storageListener = (e) => {
-      if (e.key === "usuarios") cargarUsuarios();
-    };
-    window.addEventListener("storage", storageListener);
-
-    return () => {
-      window.removeEventListener("usuariosActualizados", actualizar);
-      window.removeEventListener("storage", storageListener);
-    };
-  }, []);
-
-  // 🔹 Agregar usuario manual desde admin
-  const handleAgregar = (e) => {
+  // ==========================================================
+  // ➕ AGREGAR USUARIO (usa endpoint de REGISTER para hashear)
+  // ==========================================================
+  const handleAgregar = async (e) => {
     e.preventDefault();
 
     if (!usuarioActual.nombre || !usuarioActual.email || !usuarioActual.password) {
@@ -45,60 +53,115 @@ function AdminUsuarios() {
       return;
     }
 
-    const usuariosActuales = JSON.parse(localStorage.getItem("usuarios")) || [];
-    const existe = usuariosActuales.some(
-      (u) => u.email.toLowerCase() === usuarioActual.email.toLowerCase()
-    );
-    if (existe) {
-      alert("⚠️ Ya existe un usuario con ese correo.");
-      return;
+    try {
+      const res = await fetch(`${BACKEND_URL}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(usuarioActual),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        alert("Usuario creado correctamente ✔️");
+        limpiarFormulario();
+        cargarUsuarios();
+      } else {
+        alert(data.error || "Error al crear usuario");
+      }
+    } catch (error) {
+      console.error(error);
     }
-
-    const nuevo = { ...usuarioActual, id: Date.now() };
-    const actualizados = [...usuariosActuales, nuevo];
-    localStorage.setItem("usuarios", JSON.stringify(actualizados));
-    setUsuarios(actualizados);
-    window.dispatchEvent(new Event("usuariosActualizados"));
-
-    setUsuarioActual({ id: null, nombre: "", email: "", rol: "Cliente", password: "" });
   };
 
-  // 🔹 Editar
+  // ========================================================
+  // ✏️ ACTUALIZAR USUARIO (rol o datos generales)
+  // ========================================================
+  const handleActualizar = async (e) => {
+    e.preventDefault();
+
+    try {
+      const body = { ...usuarioActual };
+
+      if (usuarioActual.password === "") {
+        delete body.password; // ← no enviar password si no se cambia
+      }
+
+      const res = await fetch(`${BACKEND_URL}/usuarios/${usuarioActual.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (res.ok) {
+        alert("Usuario actualizado correctamente ✔️");
+        limpiarFormulario();
+        cargarUsuarios();
+      } else {
+        alert("Error al actualizar");
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  // ========================================================
+  // 🗑 ELIMINAR USUARIO
+  // ========================================================
+  const handleEliminar = async (id) => {
+    if (!window.confirm("¿Estás seguro de eliminar este usuario?")) return;
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/usuarios/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (res.ok) {
+        cargarUsuarios();
+      } else {
+        alert("Error eliminando usuario");
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  // ========================================================
+  // 🔧 Utilidades
+  // ========================================================
   const handleEditar = (usuario) => {
     setModoEdicion(true);
-    setUsuarioActual(usuario);
+    setUsuarioActual({ ...usuario, password: "" });
   };
 
-  const handleActualizar = (e) => {
-    e.preventDefault();
-    const actualizados = usuarios.map((u) =>
-      u.id === usuarioActual.id ? usuarioActual : u
-    );
-    localStorage.setItem("usuarios", JSON.stringify(actualizados));
-    setUsuarios(actualizados);
-    setModoEdicion(false);
-    setUsuarioActual({ id: null, nombre: "", email: "", rol: "Cliente", password: "" });
-  };
-
-  // 🔹 Eliminar
-  const handleEliminar = (id) => {
-    if (window.confirm("¿Seguro que deseas eliminar este usuario?")) {
-      const actualizados = usuarios.filter((u) => u.id !== id);
-      localStorage.setItem("usuarios", JSON.stringify(actualizados));
-      setUsuarios(actualizados);
-    }
-  };
-
-  // 🔹 Manejo de inputs
   const handleChange = (e) => {
     const { name, value } = e.target;
     setUsuarioActual({ ...usuarioActual, [name]: value });
   };
 
+  const limpiarFormulario = () => {
+    setModoEdicion(false);
+    setUsuarioActual({
+      id: null,
+      nombre: "",
+      email: "",
+      rol: "Cliente",
+      password: "",
+    });
+  };
+
+  // ========================================================
+  // 📋 RENDER
+  // ========================================================
   return (
     <div className="container mt-4">
       <h2 className="fw-bold text-center mb-4">👥 Gestión de Usuarios</h2>
 
+      {/* FORM */}
       <form
         onSubmit={modoEdicion ? handleActualizar : handleAgregar}
         className="p-4 border rounded bg-light mb-4 shadow-sm"
@@ -115,6 +178,7 @@ function AdminUsuarios() {
               required
             />
           </div>
+
           <div className="col-md-3">
             <input
               type="email"
@@ -126,6 +190,7 @@ function AdminUsuarios() {
               required
             />
           </div>
+
           <div className="col-md-2">
             <select
               name="rol"
@@ -137,55 +202,61 @@ function AdminUsuarios() {
               <option value="Admin">Admin</option>
             </select>
           </div>
+
           <div className="col-md-2">
             <input
               type="password"
               name="password"
-              placeholder="Contraseña"
+              placeholder={modoEdicion ? "(Opcional)" : "Contraseña"}
               value={usuarioActual.password}
               onChange={handleChange}
               className="form-control"
-              required
+              required={!modoEdicion}
             />
           </div>
-          <div className="col-md-2 d-flex">
+
+          <div className="col-md-2 d-flex gap-1">
             <button className="btn btn-primary w-100">
-              {modoEdicion ? "Actualizar" : "Agregar"}
+              {modoEdicion ? "Guardar" : "Agregar"}
             </button>
+
+            {modoEdicion && (
+              <button type="button" onClick={limpiarFormulario} className="btn btn-secondary">
+                ❌
+              </button>
+            )}
           </div>
         </div>
       </form>
 
+      {/* TABLA */}
       <div className="table-responsive">
-        <table className="table table-hover align-middle">
+        <table className="table table-hover">
           <thead className="table-dark">
             <tr>
-              <th>#</th>
+              <th>ID</th>
               <th>Nombre</th>
               <th>Email</th>
               <th>Rol</th>
               <th>Acciones</th>
             </tr>
           </thead>
+
           <tbody>
             {usuarios.length === 0 ? (
               <tr>
                 <td colSpan="5" className="text-center text-muted">
-                  No hay usuarios registrados.
+                  No hay usuarios o cargando...
                 </td>
               </tr>
             ) : (
-              usuarios.map((u, i) => (
+              usuarios.map((u) => (
                 <tr key={u.id}>
-                  <td>{i + 1}</td>
+                  <td>{u.id}</td>
                   <td>{u.nombre}</td>
                   <td>{u.email}</td>
                   <td>
-                    <span
-                      className={`badge ${
-                        u.rol === "Admin" ? "bg-danger" : "bg-secondary"
-                      }`}
-                    >
+                    <span className={`badge ${u.rol === "Admin" ? "bg-danger" : "bg-secondary"}`}>
                       {u.rol}
                     </span>
                   </td>
@@ -200,7 +271,7 @@ function AdminUsuarios() {
                       className="btn btn-sm btn-danger"
                       onClick={() => handleEliminar(u.id)}
                     >
-                      🗑️ Eliminar
+                      🗑 Eliminar
                     </button>
                   </td>
                 </tr>

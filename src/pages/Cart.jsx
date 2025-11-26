@@ -7,33 +7,40 @@ function Cart() {
     useContext(CartContext);
 
   const total = carrito.reduce(
-    (sum, p) => sum + (p.precio || 0) * (p.cantidad || 1),
+    (sum, p) => sum + (Number(p.precio) || 0) * (Number(p.cantidad) || 1),
     0
   );
 
-  // ✅ Sumar una unidad
-  const sumarCantidad = (producto) => {
-    const stockDisponible = producto.stock ?? 0;
-    const cantidadActual = producto.cantidad ?? 1;
+  // ========================================================
+  // SUMAR +1
+  // ========================================================
+  const sumarCantidad = (p) => {
+    const cantidadActual = Number(p.cantidad) || 1;
+    const nuevaCantidad = cantidadActual + 1;
 
-    if (cantidadActual >= stockDisponible) {
-      alert("Stock máximo alcanzado.");
+    if (nuevaCantidad > p.stock) {
+      alert("Stock máximo alcanzado");
       return;
     }
 
-    const actualizado = { ...producto, cantidad: cantidadActual + 1 };
-    agregarAlCarrito(actualizado, true);
+    agregarAlCarrito({ id: p.id, cantidad: nuevaCantidad });
   };
 
-  // ✅ Restar una unidad
-  const restarCantidad = (producto) => {
-    const cantidadActual = producto.cantidad ?? 1;
-    if (cantidadActual <= 1) return;
+  // ========================================================
+  // RESTAR -1
+  // ========================================================
+  const restarCantidad = (p) => {
+    const cantidadActual = Number(p.cantidad) || 1;
+    const nuevaCantidad = cantidadActual - 1;
 
-    const actualizado = { ...producto, cantidad: cantidadActual - 1 };
-    agregarAlCarrito(actualizado, true);
+    if (nuevaCantidad < 1) return;
+
+    agregarAlCarrito({ id: p.id, cantidad: nuevaCantidad });
   };
 
+  // ========================================================
+  // SI NO HAY PRODUCTOS
+  // ========================================================
   if (carrito.length === 0) {
     return (
       <div className="container text-center py-5">
@@ -47,15 +54,15 @@ function Cart() {
 
   return (
     <div className="container py-5">
+
       <div className="alert alert-info shadow-sm mb-4">
-        <strong>¡Vista Carrito de Compras!</strong> Gestiona tus productos,
-        ajusta cantidades o finaliza tu compra.
+        <strong>🛒 Carrito de Compras</strong> | Ajusta cantidades o finaliza tu pedido.
       </div>
 
       <div className="row g-4">
-        {/* Lista de productos */}
         <div className="col-md-8">
-          <h4 className="fw-bold mb-3 text-light">Carrito de Compras</h4>
+          <h4 className="fw-bold mb-3 text-light">Productos en tu carrito</h4>
+
           <div className="table-responsive">
             <table className="table table-dark table-hover align-middle">
               <thead>
@@ -65,88 +72,71 @@ function Cart() {
                   <th>Precio</th>
                   <th>Cantidad</th>
                   <th>Subtotal</th>
-                  <th>Acciones</th>
+                  <th></th>
                 </tr>
               </thead>
-              <tbody>
-                {carrito.map((p) => {
-                  const cantidadActual = p.cantidad || 1;
-                  const stockDisponible = p.stock ?? 0;
-                  const maximoAlcanzado = cantidadActual >= stockDisponible;
 
-                  // 🎨 Cambia color del texto según el stock
-                  const stockColor =
-                    stockDisponible <= 1
-                      ? "text-danger"
-                      : stockDisponible <= 3
-                        ? "text-warning"
-                        : "text-light";
+              <tbody>
+                {carrito.map((p, index) => {
+                  const cantidadActual = Number(p.cantidad) || 1;
+                  const precio = Number(p.precio) || 0;
 
                   return (
-                    <tr key={p.id}>
+                    <tr key={p.cartItemId || index}>
                       <td>
                         <img
-                          src={
-                            p.imagenes && p.imagenes[0]
-                              ? p.imagenes[0]
-                              : "/img/placeholder.jpg"
-                          }
-                          alt={p.nombre}
+                          src={p.imagenes?.[0] || "/img/placeholder.jpg"}
                           width="60"
                           height="60"
                           style={{
-                            objectFit: "contain",
-                            backgroundColor: "#fff",
-                            borderRadius: "5px",
+                            objectFit: "cover",
+                            background: "#fff",
                             padding: "5px",
+                            borderRadius: "5px",
                           }}
                         />
                       </td>
+
                       <td className="fw-semibold">
                         {p.nombre}
                         <br />
-                        <small className={stockColor}>
-                          Stock disponible: {stockDisponible}
+                        <small className="text-warning d-block">
+                          Stock disponible: {p.stock}
                         </small>
                       </td>
-                      <td>${p.precio.toLocaleString("es-CL")}</td>
+
+                      <td>${precio.toLocaleString("es-CL")}</td>
+
                       <td>
-                        <div className="d-flex align-items-center justify-content-center">
+                        <div className="d-flex align-items-center">
                           <button
-                            className="btn btn-sm btn-outline-light me-1"
+                            className="btn btn-sm btn-outline-light me-2"
                             onClick={() => restarCantidad(p)}
                             disabled={cantidadActual <= 1}
                           >
                             −
                           </button>
-                          <span className="mx-2">{cantidadActual}</span>
+
+                          <span>{cantidadActual}</span>
+
                           <button
-                            className="btn btn-sm btn-outline-light"
+                            className="btn btn-sm btn-outline-light ms-2"
                             onClick={() => sumarCantidad(p)}
-                            disabled={maximoAlcanzado}
-                            title={
-                              maximoAlcanzado
-                                ? "Stock máximo alcanzado"
-                                : "Agregar una unidad más"
-                            }
-                            style={
-                              maximoAlcanzado
-                                ? { opacity: 0.5, cursor: "not-allowed" }
-                                : {}
-                            }
+                            disabled={cantidadActual >= p.stock}
                           >
                             +
                           </button>
                         </div>
                       </td>
+
                       <td>
-                        $
-                        {(p.precio * cantidadActual).toLocaleString("es-CL")}
+                        ${(precio * cantidadActual).toLocaleString("es-CL")}
                       </td>
+
                       <td>
                         <button
                           className="btn btn-danger btn-sm"
-                          onClick={() => eliminarDelCarrito(p.id)}
+                          onClick={() => eliminarDelCarrito(p.cartItemId)}
                         >
                           Eliminar
                         </button>
@@ -155,39 +145,41 @@ function Cart() {
                   );
                 })}
               </tbody>
+
             </table>
           </div>
         </div>
 
-        {/* Resumen */}
         <div className="col-md-4">
           <div className="card bg-dark text-light shadow-sm">
             <div className="card-body">
+
               <h5 className="fw-bold mb-3">Resumen de Compra</h5>
+
               <p className="d-flex justify-content-between">
-                <span>Total de productos:</span>
+                <span>Total productos:</span>
                 <strong>{carrito.length}</strong>
               </p>
+
               <p className="d-flex justify-content-between">
-                <span>Total:</span>
+                <span>Total a pagar:</span>
                 <strong>${total.toLocaleString("es-CL")}</strong>
               </p>
 
-              <div className="d-grid gap-2 mt-4">
-                <button
-                  className="btn btn-outline-danger"
-                  onClick={vaciarCarrito}
-                >
-                  🗑 Limpiar carrito
+              <div className="d-grid mt-4 gap-2">
+                <button className="btn btn-outline-danger" onClick={vaciarCarrito}>
+                  🗑 Vaciar carrito
                 </button>
+
                 <Link to="/checkout" className="btn btn-success">
-                  💳 Comprar ahora
+                  💳 Proceder al pago
                 </Link>
               </div>
 
             </div>
           </div>
         </div>
+
       </div>
     </div>
   );

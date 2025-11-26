@@ -1,8 +1,7 @@
 import HeroSection from "../components/organisms/HeroSection";
 import ProductSection from "../components/organisms/ProductSection";
 
-
-function Home() {
+export default function Home() {
   return (
     <>
       {/* Hero principal */}
@@ -16,6 +15,7 @@ function Home() {
       <section className="bg-body-secondary py-5 border-top">
         <div className="container">
           <h3 className="text-center mb-4 fw-bold text-dark">
+            🚀 Productos Destacados
           </h3>
           <ProductSection />
         </div>
@@ -23,5 +23,3 @@ function Home() {
     </>
   );
 }
-
-export default Home;

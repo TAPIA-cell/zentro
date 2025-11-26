@@ -1,0 +1,2 @@
+ALTER TABLE ventas AUTO_INCREMENT = 1;
+ALTER TABLE ventas_detalle AUTO_INCREMENT = 1;

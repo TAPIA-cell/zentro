@@ -8,8 +8,9 @@ function Navbar() {
   const { totalItems } = useContext(CartContext);
 
   return (
-    <nav className="navbar navbar-expand-lg bg-body-secondary border-bottom">
+    <nav className="navbar navbar-expand-lg bg-body-secondary border-bottom sticky-top">
       <div className="container-fluid">
+
         {/* Marca */}
         <Link className="navbar-brand fw-bold d-flex align-items-center" to="/">
           <img
@@ -57,12 +58,12 @@ function Navbar() {
           <div className="d-flex align-items-center">
             {!usuario ? (
               <>
-                <Link to="/login" className="me-2 small text-dark">
+                <Link to="/login" className="me-2 small text-dark text-decoration-none">
                   Iniciar sesión
                 </Link>
-                |
-                <Link to="/registro" className="ms-2 small text-dark">
-                  Registrar usuario
+                <span className="text-muted">|</span>
+                <Link to="/registro" className="ms-2 small text-dark text-decoration-none">
+                  Registrarse
                 </Link>
               </>
             ) : (
@@ -70,6 +71,7 @@ function Navbar() {
                 <span className="ms-2 fw-bold text-dark">
                   👤 {usuario.nombre}
                 </span>
+
                 {usuario.rol === "Admin" && (
                   <Link
                     to="/admin"
@@ -78,29 +80,42 @@ function Navbar() {
                     Admin
                   </Link>
                 )}
+
                 <button
                   onClick={logout}
                   className="btn btn-outline-danger ms-2 btn-sm"
                 >
-                  Cerrar sesión
+                  Salir
                 </button>
               </>
             )}
+
             {/* Carrito */}
             <Link
               to="/carrito"
               className="btn btn-outline-dark ms-3 position-relative"
             >
               🛒 Carrito
+
+              {/* Badge Premium */}
               {totalItems > 0 && (
                 <span
-                  className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
-                  style={{ fontSize: "0.7rem" }}
+                  className="position-absolute top-0 start-100 translate-middle badge rounded-pill"
+                  style={{
+                    background: "linear-gradient(135deg, #ff3b3b, #b30000)",
+                    color: "white",
+                    padding: "4px 8px",
+                    fontSize: "0.75rem",
+                    fontWeight: "bold",
+                    boxShadow: "0 0 6px rgba(255,0,0,0.7)",
+                    transform: "translate(-30%, -30%)",
+                  }}
                 >
                   {totalItems}
                 </span>
               )}
             </Link>
+
           </div>
         </div>
       </div>

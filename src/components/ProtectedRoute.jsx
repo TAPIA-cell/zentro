@@ -1,34 +1,29 @@
-// src/components/ProtectedRoute.jsx
 import { useContext } from "react";
 import { Navigate } from "react-router-dom";
-import { AuthContext } from "../context/AuthContext";
+import { AuthContext } from "../context/AuthContext.jsx";
 
 /**
- * Este componente sirve para proteger rutas según si el usuario está logeado
- * y/o su rol (por ejemplo, solo "Admin").
- * 
- * Uso:
- * <ProtectedRoute role="Admin">
- *   <AdminHome />
- * </ProtectedRoute>
+ * RUTA PROTEGIDA (requiere estar logueado)
+ * Este componente envuelve otros componentes para restringir el acceso.
  */
-function ProtectedRoute({ children, role }) {
-  const { usuario } = useContext(AuthContext);
+export default function ProtectedRoute({ children }) {
+  const { isLogged, cargando } = useContext(AuthContext);
 
-  // 🔒 Si no hay usuario logeado, redirige al login
-  if (!usuario) {
-    alert("⚠️ Debes iniciar sesión para acceder a esta sección.");
+  // Mostrar loading mientras se carga la sesión
+  if (cargando) {
+    return (
+      <div className="text-center py-5">
+        <div className="spinner-border text-primary" role="status"></div>
+        <p className="mt-2 text-muted">Verificando sesión...</p>
+      </div>
+    );
+  }
+
+  // Si no está logueado, enviar al login
+  if (!isLogged()) {
     return <Navigate to="/login" replace />;
   }
 
-  // 🔐 Si tiene rol requerido y no coincide, redirige al inicio
-  if (role && usuario.rol !== role) {
-    alert("⛔ No tienes permisos para acceder a esta sección.");
-    return <Navigate to="/" replace />;
-  }
-
-  // ✅ Si pasa las validaciones, renderiza el contenido
+  // Acceso permitido
   return children;
 }
-
-export default ProtectedRoute;

@@ -1,352 +1,434 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useContext } from "react";
+import { AuthContext } from "../context/AuthContext.jsx";
 
-function AdminProductos() {
-  
-  // 1. AÑADIR 'stock' a la inicialización del estado del producto
-  const [productos, setProductos] = useState(() => {
-    const almacenados = JSON.parse(localStorage.getItem("productos"));
-    // Aseguramos que los productos antiguos tengan stock 0 por defecto si no lo tienen
-    const safeData = Array.isArray(almacenados) 
-      ? almacenados.map(p => ({ ...p, stock: p.stock !== undefined ? p.stock : 0 }))
-      : [];
-    return safeData;
-  });
+export default function AdminProductos() {
+  const { token } = useContext(AuthContext);
 
+  const BACKEND_URL =
+    import.meta.env.VITE_API_URL || "http://localhost:3000/api";
+
+  const BASE_URL = BACKEND_URL.replace("/api", "");
+  const API_URL = `${BACKEND_URL}/productos`;
+
+  const [productos, setProductos] = useState([]);
   const [productoActual, setProductoActual] = useState({
     id: null,
     nombre: "",
     precio: "",
     descripcion: "",
-    stock: 0, 
-    imagenes: []
+    stock: 0,
+    imagenes: [],
   });
 
-  const [preview, setPreview] = useState([]);
-  
-  const isEditing = productoActual.id !== null;
+  const [isEditing, setIsEditing] = useState(false);
+  const [nuevaImagen, setNuevaImagen] = useState("");
 
-  const [showImageModal, setShowImageModal] = useState(false);
-  const [selectedProductForImages, setSelectedProductForImages] = useState(null);
+  // ======================================================
+  // PARSEAR IMÁGENES JSON MYSQL
+  // ======================================================
+  const parsearImagenes = (imgData) => {
+    if (!imgData) return [];
+    try {
+      if (Array.isArray(imgData)) return imgData;
+      const parsed = JSON.parse(imgData);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  };
 
-  // Sincronización con el evento 'storage' (Correcto)
+  // ======================================================
+  // CARGAR PRODUCTOS
+  // ======================================================
   useEffect(() => {
-    const sync = () => {
-      const data = JSON.parse(localStorage.getItem("productos"));
-      if (Array.isArray(data)) setProductos(data);
-    };
-
-    window.addEventListener("storage", sync);
-    return () => window.removeEventListener("storage", sync);
+    cargarProductos();
   }, []);
 
-  // Guardar siempre que cambien los productos (Correcto)
-  useEffect(() => {
-    localStorage.setItem("productos", JSON.stringify(productos));
-  }, [productos]);
+  const cargarProductos = async () => {
+    try {
+      const res = await fetch(API_URL);
+      const data = await res.json();
 
-  // Manejadores
-  
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    // Validamos que stock y precio sean > 0 (si son obligatorios)
-    if (!productoActual.nombre || !productoActual.precio || productoActual.stock < 0) {
-      alert("⚠️ Completa el nombre, precio y asegura que el stock sea ≥ 0.");
-      return;
-    }
-
-    if (isEditing) {
-      setProductos(productos.map((p) =>
-        p.id === productoActual.id ? productoActual : p
-      ));
-    } else {
-      const nuevo = {
-        ...productoActual,
-        id: productos.length > 0 ? Math.max(...productos.map((p) => p.id)) + 1 : 1
-      };
-      setProductos([...productos, nuevo]);
-    }
-
-    limpiar();
-  };
-
-  const handleEliminar = (id) => {
-    if (window.confirm("¿Eliminar producto?")) {
-      const nuevos = productos.filter((p) => p.id !== id);
-      setProductos(nuevos);
+      setProductos(
+        (Array.isArray(data) ? data : []).map((p) => ({
+          ...p,
+          imagenes: parsearImagenes(p.imagenes),
+        }))
+      );
+    } catch (err) {
+      console.error("Error cargando productos:", err);
     }
   };
 
-  const handleEditar = (p) => {
-    // Aseguramos que stock se cargue correctamente (o 0 si es undefined)
-    setProductoActual({ ...p, stock: p.stock !== undefined ? p.stock : 0 });
-    setPreview(p.imagenes || []);
-  };
+  // ======================================================
+  // SUBIR ARCHIVO
+  // ======================================================
+  const subirArchivo = async (e) => {
+    const archivo = e.target.files[0];
+    if (!archivo) return;
 
-  const handleImages = (files) => {
-    [...files].forEach((file) => {
-      const reader = new FileReader();
-      
-      reader.onload = (e) => {
-        const base64Image = e.target.result;
+    const formData = new FormData();
+    formData.append("imagen", archivo);
 
-        setPreview((prev) => [...prev, base64Image]);
-        
+    try {
+      const res = await fetch(`${BACKEND_URL}/upload`, {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (data.url) {
         setProductoActual((prev) => ({
           ...prev,
-          imagenes: [...(prev.imagenes || []), base64Image]
+          imagenes: [...prev.imagenes, data.url],
         }));
-      };
-      reader.readAsDataURL(file);
+      }
+    } catch (err) {
+      console.error("Error subiendo archivo:", err);
+    }
+  };
+
+  // ======================================================
+  // AGREGAR IMAGEN POR URL
+  // ======================================================
+  const agregarImagen = () => {
+    if (!nuevaImagen.trim()) return;
+
+    setProductoActual((prev) => ({
+      ...prev,
+      imagenes: [...prev.imagenes, nuevaImagen.trim()],
+    }));
+
+    setNuevaImagen("");
+  };
+
+  // ======================================================
+  // QUITAR IMAGEN
+  // ======================================================
+  const quitarImagen = (index) => {
+    setProductoActual((prev) => ({
+      ...prev,
+      imagenes: prev.imagenes.filter((_, i) => i !== index),
+    }));
+  };
+
+  // ======================================================
+  // GUARDAR / EDITAR PRODUCTO
+  // ======================================================
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    const payload = {
+      nombre: productoActual.nombre.trim(),
+      precio: Number(productoActual.precio),
+      descripcion: productoActual.descripcion.trim(),
+      stock: Number(productoActual.stock),
+      imagenes: productoActual.imagenes,
+    };
+
+    const headers = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    };
+
+    try {
+      let res;
+
+      if (isEditing) {
+        res = await fetch(`${API_URL}/${productoActual.id}`, {
+          method: "PUT",
+          headers,
+          body: JSON.stringify(payload),
+        });
+      } else {
+        res = await fetch(API_URL, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(payload),
+        });
+      }
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.error || "Error al guardar");
+        return;
+      }
+
+      alert(isEditing ? "Producto actualizado" : "Producto creado");
+
+      limpiar();
+      cargarProductos();
+    } catch (err) {
+      console.error("Error guardando:", err);
+    }
+  };
+
+  // ======================================================
+  // EDITAR PRODUCTO
+  // ======================================================
+  const handleEditar = (prod) => {
+    setProductoActual({
+      id: prod.id,
+      nombre: prod.nombre,
+      precio: Number(prod.precio),
+      descripcion: prod.descripcion || "",
+      stock: Number(prod.stock),
+      imagenes: parsearImagenes(prod.imagenes),
     });
+
+    setIsEditing(true);
   };
 
+  // ======================================================
+  // LIMPIAR FORMULARIO
+  // ======================================================
   const limpiar = () => {
-    // Restablecemos el estado del producto actual
-    setProductoActual({ id: null, nombre: "", precio: "", descripcion: "", stock: 0, imagenes: [] });
-    setPreview([]);
-    // Aseguramos que el input de archivo también se limpie
-    const fileInput = document.getElementById("fileImg");
-    if(fileInput) fileInput.value = '';
+    setProductoActual({
+      id: null,
+      nombre: "",
+      precio: "",
+      descripcion: "",
+      stock: 0,
+      imagenes: [],
+    });
+
+    setNuevaImagen("");
+    setIsEditing(false);
   };
 
-  const openImageModal = (product) => {
-    setSelectedProductForImages(product);
-    setShowImageModal(true);
+  // ======================================================
+  // RESOLVER URL SOLUCIÓN DEFINITIVA 🔥
+  // ======================================================
+  const resolverURL = (img) => {
+    if (!img) return "https://via.placeholder.com/100?text=IMG";
+
+    // Si es URL completa
+    if (img.startsWith("http")) return img;
+
+    // Si ya viene con /img/ → OK
+    if (img.startsWith("/img/")) return BASE_URL + img;
+
+    // Si viene "img/archivo.webp"
+    if (img.startsWith("img/")) return `${BASE_URL}/${img}`;
+
+    // Cleanup de rutas heredadas
+    const limpio = img
+      .replace("backend/public/", "")
+      .replace("public/", "")
+      .replace(/^\/+/, "");
+
+    return `${BASE_URL}/img/${limpio}`;
   };
 
-  const closeImageModal = () => {
-    setShowImageModal(false);
-    setSelectedProductForImages(null);
+  // ======================================================
+  // ELIMINAR PRODUCTO
+  // ======================================================
+  const handleEliminar = async (id) => {
+    if (!confirm("¿Eliminar producto?")) return;
+
+    try {
+      await fetch(`${API_URL}/${id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      cargarProductos();
+    } catch (err) {
+      console.error("Error eliminando:", err);
+    }
   };
-  
-  // --- Renderizado de la Componente ---
+
+  // ======================================================
+  // RENDER
+  // ======================================================
   return (
-    <div className="container py-5">
-      <h1 className="mb-4 text-dark border-bottom pb-2">Gestión de Productos</h1>
+    <div className="container py-4">
+      <h2 className="mb-4">🛍️ Gestión de Productos</h2>
 
-      {/* --- SECCIÓN DE FORMULARIO --- */}
-      <div className={`p-4 mb-5 border rounded ${isEditing ? 'border-primary' : 'border-light-subtle'}`}>
-        <h3 className="mb-4 fw-normal text-muted">
-            {isEditing ? '✏️ Editar Producto' : '✨ Nuevo Producto'}
-        </h3>
-        <form onSubmit={handleSubmit} className="row g-4">
-            
-            {/* Campos de Texto/Número */}
-            <div className="col-md-4">
-              <label htmlFor="nombreProducto" className="form-label text-muted">Nombre</label>
-              <input 
-                id="nombreProducto" 
-                className="form-control" 
-                placeholder="Nombre del Producto" 
-                name="nombre" 
-                value={productoActual.nombre}
-                onChange={(e) => setProductoActual({ ...productoActual, nombre: e.target.value })} 
-                required
+      {/* FORMULARIO */}
+      <form
+        onSubmit={handleSubmit}
+        className="p-3 border rounded bg-light shadow-sm"
+      >
+        <h4>{isEditing ? "✏️ Editar Producto" : "✨ Nuevo Producto"}</h4>
+
+        <div className="row mt-3">
+          <div className="col-md-4">
+            <label>Nombre</label>
+            <input
+              className="form-control"
+              value={productoActual.nombre}
+              onChange={(e) =>
+                setProductoActual({ ...productoActual, nombre: e.target.value })
+              }
+              required
+            />
+          </div>
+
+          <div className="col-md-3">
+            <label>Precio</label>
+            <input
+              type="number"
+              className="form-control"
+              value={productoActual.precio}
+              onChange={(e) =>
+                setProductoActual({ ...productoActual, precio: e.target.value })
+              }
+              required
+            />
+          </div>
+
+          <div className="col-md-3">
+            <label>Stock</label>
+            <input
+              type="number"
+              className="form-control"
+              value={productoActual.stock}
+              onChange={(e) =>
+                setProductoActual({ ...productoActual, stock: e.target.value })
+              }
+            />
+          </div>
+
+          <div className="col-md-12 mt-3">
+            <label>Descripción</label>
+            <textarea
+              className="form-control"
+              rows={2}
+              value={productoActual.descripcion}
+              onChange={(e) =>
+                setProductoActual({
+                  ...productoActual,
+                  descripcion: e.target.value,
+                })
+              }
+            />
+          </div>
+
+          {/* IMÁGENES */}
+          <div className="col-12 mt-3">
+            <label>Imágenes del producto</label>
+
+            <div className="input-group mb-2">
+              <input
+                className="form-control"
+                placeholder="Pegar URL"
+                value={nuevaImagen}
+                onChange={(e) => setNuevaImagen(e.target.value)}
               />
-            </div>
-            
-            <div className="col-md-3">
-              <label htmlFor="precioProducto" className="form-label text-muted">Precio ($)</label>
-              <input 
-                id="precioProducto" 
-                className="form-control" 
-                type="number" 
-                placeholder="0" 
-                name="precio" 
-                value={productoActual.precio}
-                // ✅ ARREGLO 1: Usar parseInt(e.target.value) || '' si el campo debe ser vacío
-                // Sin embargo, como el state inicial es '', si se borra el input, queremos que sea una cadena vacía temporalmente, no 0, para que el usuario pueda escribir.
-                onChange={(e) => setProductoActual({ ...productoActual, precio: e.target.value === '' ? '' : parseInt(e.target.value) })} 
-                required
-                min="0"
-              />
-            </div>
-
-            {/* Campo de Stock */}
-            <div className="col-md-2">
-              <label htmlFor="stockProducto" className="form-label text-muted">Stock</label>
-              <input 
-                id="stockProducto" 
-                className="form-control" 
-                type="number" 
-                placeholder="0" 
-                name="stock" 
-                value={productoActual.stock}
-                // ✅ ARREGLO 2: Usar parseInt(e.target.value) || 0 para que stock siempre sea numérico (o 0)
-                onChange={(e) => setProductoActual({ ...productoActual, stock: parseInt(e.target.value) || 0 })} 
-                required
-                min="0"
-              />
-            </div>
-
-            <div className="col-md-3">
-              <label htmlFor="descripcionProducto" className="form-label text-muted">Descripción</label>
-              <input 
-                id="descripcionProducto" 
-                className="form-control" 
-                placeholder="Descripción corta (opcional)" 
-                name="descripcion" 
-                value={productoActual.descripcion}
-                onChange={(e) => setProductoActual({ ...productoActual, descripcion: e.target.value })} 
-              />
-            </div>
-
-            {/* Área de Carga de Imágenes */}
-            <div className="col-12 mt-4">
-                <label className="form-label text-muted">Imágenes</label>
-                <div
-                    className="border border-1 rounded p-3 text-center bg-white"
-                    style={{ cursor: 'pointer', borderStyle: 'solid', borderColor: '#e9ecef' }}
-                    onClick={() => document.getElementById("fileImg").click()}
-                >
-                    <p className="mb-1 text-secondary">Haga clic para subir o arrastre</p>
-                    <small className="text-muted">{preview.length} {preview.length === 1 ? 'imagen' : 'imágenes'} cargadas</small>
-
-                    <input type="file" id="fileImg" hidden multiple onChange={(e) => handleImages(e.target.files)} />
-                    
-                    <div className="d-flex flex-wrap gap-2 mt-3 justify-content-center">
-                        {preview.map((img, i) => (
-                            <img 
-                                key={i} 
-                                src={img} 
-                                alt={`preview-${i}`} 
-                                width="60" 
-                                height="60"
-                                className="rounded border object-fit-cover shadow-sm" 
-                            />
-                        ))}
-                    </div>
-                </div>
-            </div>
-
-            {/* Botones de Acción */}
-            <div className="col-12 pt-3 d-flex justify-content-end">
-              <button type="button" className="btn btn-outline-secondary me-2" onClick={limpiar}>
-                {isEditing ? 'Cancelar Edición' : 'Limpiar'}
-              </button>
-              <button 
-                type="submit" 
-                className={`btn ${isEditing ? 'btn-primary' : 'btn-dark'}`}
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={agregarImagen}
               >
-                {isEditing ? 'Guardar Cambios' : 'Crear Producto'}
+                ➕ URL
               </button>
             </div>
-          </form>
-      </div>
-      
-      {/* --- SECCIÓN DE TABLA --- */}
-      <h3 className="mb-3 fw-normal text-muted border-bottom pb-2">Listado ({productos.length})</h3>
 
-      <div className="table-responsive">
-          <table className="table table-borderless table-hover align-middle">
-              <thead className="border-bottom">
-                  <tr>
-                      <th className="text-muted">ID</th>
-                      <th className="text-muted">Nombre</th>
-                      <th className="text-muted">Precio</th>
-                      <th className="text-muted">Stock</th> 
-                      <th className="text-muted">Imágenes</th>
-                      <th className="text-muted">Acciones</th>
-                  </tr>
-              </thead>
-              <tbody>
-                  {productos.length === 0 ? (
-                      <tr><td colSpan="6" className="py-4 text-center text-secondary">No hay productos.</td></tr>
-                  ) : productos.map((p) => (
-                      <tr key={p.id}>
-                          <td className="text-muted">{p.id}</td>
-                          <td className="fw-medium">{p.nombre}</td>
-                          <td className="fw-semibold">${Number(p.precio).toLocaleString("es-CL")}</td>
-                          {/* MOSTRAR STOCK CON INDICADOR DE COLOR */}
-                          <td>
-                              <span className={`fw-bold ${p.stock <= 5 ? 'text-danger' : p.stock <= 20 ? 'text-warning' : 'text-success'}`}>
-                                  {p.stock}
-                              </span>
-                          </td>
-                          {/* FIN STOCK */}
-                          <td>
-                            <div className="d-flex gap-1 justify-content-start align-items-center">
-                                {p.imagenes?.slice(0, 3).map((img, i) => 
-                                    <img key={i} src={img} alt="mini" width="30" height="30" className="rounded object-fit-cover border" />
-                                )}
-                                {p.imagenes.length > 0 && (
-                                    <button 
-                                        className="btn btn-sm btn-outline-secondary border-0 p-0 ms-1"
-                                        onClick={() => openImageModal(p)}
-                                        title={`Ver todas las ${p.imagenes.length} imágenes`}
-                                        style={{ width: '30px', height: '30px' }} 
-                                    >
-                                        <small className="fw-bold">{p.imagenes.length > 3 ? `+${p.imagenes.length - 3}` : '👀'}</small>
-                                    </button>
-                                )}
-                                {p.imagenes.length === 0 && <span className="text-muted small">N/A</span>}
-                            </div>
-                          </td>
-                          <td>
-                              <button className="btn btn-outline-secondary btn-sm me-2 border-0" onClick={() => handleEditar(p)} title="Editar">
-                                  ✏️
-                              </button>
-                              <button className="btn btn-outline-secondary btn-sm border-0" onClick={() => handleEliminar(p.id)} title="Eliminar">
-                                  🗑️
-                              </button>
-                          </td>
-                      </tr>
-                  ))}
-              </tbody>
-          </table>
-      </div>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={subirArchivo}
+              className="form-control mb-2"
+            />
 
-      {/* --- MODAL DE IMÁGENES --- */}
-      {showImageModal && selectedProductForImages && (
-        <div 
-            className="modal fade show d-block" 
-            tabIndex="-1" 
-            style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} 
-            aria-labelledby="imageModalLabel" 
-            aria-modal="true" 
-            role="dialog"
-        >
-          <div className="modal-dialog modal-lg modal-dialog-centered">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title" id="imageModalLabel">
-                    Imágenes de: <span className="fw-bold">{selectedProductForImages.nombre}</span>
-                </h5>
-                <button type="button" className="btn-close" aria-label="Close" onClick={closeImageModal}></button>
-              </div>
-              <div className="modal-body">
-                {selectedProductForImages.imagenes.length === 0 ? (
-                    <p className="text-center text-muted">Este producto no tiene imágenes.</p>
-                ) : (
-                    <div className="row row-cols-1 row-cols-sm-2 row-cols-md-3 g-3">
-                        {selectedProductForImages.imagenes.map((img, i) => (
-                            <div className="col" key={i}>
-                                <div className="card shadow-sm h-100">
-                                    <img 
-                                        src={img} 
-                                        className="bd-placeholder-img card-img-top object-fit-cover" 
-                                        width="100%" 
-                                        height="225" 
-                                        alt={`Imagen ${i + 1}`} 
-                                    />
-                                    <div className="card-body p-2">
-                                        <p className="card-text text-muted small mb-0">Imagen {i + 1}</p>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-              </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={closeImageModal}>Cerrar</button>
-              </div>
+            {/* PREVIEW */}
+            <div className="d-flex flex-wrap gap-2">
+              {productoActual.imagenes.map((img, i) => (
+                <div key={i} className="position-relative">
+                  <img
+                    src={resolverURL(img)}
+                    width="80"
+                    height="80"
+                    className="border rounded object-fit-cover"
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-danger btn-sm position-absolute top-0 end-0 py-0 px-1"
+                    onClick={() => quitarImagen(i)}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
         </div>
-      )}
+
+        <button className="btn btn-success mt-3" type="submit">
+          {isEditing ? "Guardar cambios" : "Crear producto"}
+        </button>
+        <button
+          className="btn btn-secondary mt-3 ms-2"
+          type="button"
+          onClick={limpiar}
+        >
+          Cancelar
+        </button>
+      </form>
+
+      {/* TABLA */}
+      <div className="table-responsive mt-4">
+        <table className="table table-hover">
+          <thead className="table-dark">
+            <tr>
+              <th>ID</th>
+              <th>Nombre</th>
+              <th>Precio</th>
+              <th>Stock</th>
+              <th>Imagenes</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {productos.map((p) => (
+              <tr key={p.id}>
+                <td>{p.id}</td>
+                <td>{p.nombre}</td>
+                <td>${Number(p.precio).toLocaleString("es-CL")}</td>
+                <td>{p.stock}</td>
+                <td>
+                  {p.imagenes.length ? (
+                    <>
+                      <img
+                        src={resolverURL(p.imagenes[0])}
+                        width="50"
+                        height="50"
+                        className="border rounded object-fit-cover"
+                      />
+                      {p.imagenes.length > 1 && (
+                        <span className="small text-muted ms-1">
+                          +{p.imagenes.length - 1}
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-muted">Sin imagen</span>
+                  )}
+                </td>
+                <td>
+                  <button
+                    className="btn btn-warning btn-sm me-2"
+                    onClick={() => handleEditar(p)}
+                  >
+                    ✏️
+                  </button>
+                  <button
+                    className="btn btn-danger btn-sm"
+                    onClick={() => handleEliminar(p.id)}
+                  >
+                    🗑️
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
-
-export default AdminProductos;
