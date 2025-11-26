@@ -26,7 +26,11 @@ const PUERTO = process.env.PORT || 3000;
 // CORS optimizado
 app.use(
   cors({
+<<<<<<< HEAD
     origin: "*", // Puedes poner: "https://tuprojecto.vercel.app"
+=======
+    origin: "https://zentro-eight.vercel.app/", // Puedes poner: "https://tuprojecto.vercel.app"
+>>>>>>> 6897e291505809fcf51e2de7217485fab8f1ba8b
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
