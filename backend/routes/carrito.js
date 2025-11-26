@@ -3,8 +3,8 @@ import db from "../database.js";
 import { authRequired } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
-const totalItems = carrito.reduce((acc, p) => acc + (Number(p.cantidad) || 1), 0);
 
+// Función para parsear imágenes (JSON → Array)
 const parsearImagenes = (img) => {
   if (!img) return [];
   if (Array.isArray(img)) return img;
@@ -17,6 +17,9 @@ const parsearImagenes = (img) => {
   }
 };
 
+// ==============================
+// 🔵 OBTENER CARRITO DEL USUARIO
+// ==============================
 router.get("/", authRequired, async (req, res) => {
   const userId = req.user.id;
 
@@ -56,6 +59,9 @@ router.get("/", authRequired, async (req, res) => {
   }
 });
 
+// ==========================
+// 🔵 AGREGAR / ACTUALIZAR ITEM
+// ==========================
 router.post("/", authRequired, async (req, res) => {
   const userId = req.user.id;
   let { id_producto, cantidad } = req.body;
@@ -77,16 +83,18 @@ router.post("/", authRequired, async (req, res) => {
       return res.status(400).json({ error: `Stock máximo: ${stock}` });
 
     const [exist] = await db.query(
-      "SELECT id FROM carrito_items WHERE id_usuario = ? AND id_producto = ?",
+      "SELECT id, cantidad FROM carrito_items WHERE id_usuario = ? AND id_producto = ?",
       [userId, id_producto]
     );
 
     if (exist.length) {
+      // UPDATE cantidad
       await db.query("UPDATE carrito_items SET cantidad = ? WHERE id = ?", [
         cantidad,
         exist[0].id,
       ]);
     } else {
+      // INSERT si no existe
       await db.query(
         "INSERT INTO carrito_items (id_usuario, id_producto, cantidad) VALUES (?,?,?)",
         [userId, id_producto, cantidad]
@@ -100,6 +108,9 @@ router.post("/", authRequired, async (req, res) => {
   }
 });
 
+// ==========================
+// 🔵 ELIMINAR UN ITEM DEL CARRITO
+// ==========================
 router.delete("/:id", authRequired, async (req, res) => {
   const userId = req.user.id;
   const { id } = req.params;
@@ -113,6 +124,30 @@ router.delete("/:id", authRequired, async (req, res) => {
     res.json({ mensaje: "Item eliminado" });
   } catch (err) {
     console.error("❌ Error eliminando item:", err);
+    res.status(500).json({ error: "Error interno del servidor" });
+  }
+});
+
+// ==========================
+// 🔵 OBTENER TOTAL DE ITEMS
+// ==========================
+router.get("/total", authRequired, async (req, res) => {
+  const userId = req.user.id;
+
+  try {
+    const [rows] = await db.query(
+      "SELECT cantidad FROM carrito_items WHERE id_usuario = ?",
+      [userId]
+    );
+
+    const totalItems = rows.reduce(
+      (acc, i) => acc + (Number(i.cantidad) || 1),
+      0
+    );
+
+    res.json({ totalItems });
+  } catch (err) {
+    console.error("❌ Error obteniendo total:", err);
     res.status(500).json({ error: "Error interno del servidor" });
   }
 });

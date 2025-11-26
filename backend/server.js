@@ -5,7 +5,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import "./database.js";
 
-// Rutas
+// Importar rutas
 import uploadRoutes from "./routes/upload.js";
 import productosRoutes from "./routes/productos.js";
 import blogsRoutes from "./routes/blogs.js";
@@ -15,22 +15,30 @@ import carritoRoutes from "./routes/carrito.js";
 import ventasRoutes from "./routes/ventas.js";
 import contactoRoutes from "./routes/contacto.js";
 
+// Para __dirname en ES Modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Crear app
 const app = express();
 const PUERTO = process.env.PORT || 3000;
 
-app.use(cors());
-app.use(express.json());
-
-// 🟢 SERVIR IMÁGENES DESDE LA RUTA REAL DEL REACT
+// CORS optimizado
 app.use(
-  "/img",
-  express.static("/home/ubuntu/zentro-react/public/img")
+  cors({
+    origin: "*", // Puedes poner: "https://tuprojecto.vercel.app"
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
 );
 
-// API
+app.use(express.json());
+
+// 🟢 Servir imágenes desde la carpeta correcta
+// Esto funciona SIEMPRE sin hardcodear rutas absolutas
+app.use("/img", express.static(path.join(__dirname, "public", "img")));
+
+// Rutas API
 app.use("/api/upload", uploadRoutes);
 app.use("/api/productos", productosRoutes);
 app.use("/api/ventas", ventasRoutes);
@@ -40,11 +48,22 @@ app.use("/api/usuarios", usuariosRoutes);
 app.use("/api/carrito", carritoRoutes);
 app.use("/api/contacto", contactoRoutes);
 
-// Health
+// 🔵 Healthcheck
 app.get("/", (req, res) => {
   res.send("API Zentro funcionando en la nube ☁️");
 });
 
+// 🛑 Manejo de errores global (evita caídas silenciosas)
+app.use((err, req, res, next) => {
+  console.error("❌ Error interno:", err);
+  res.status(500).json({
+    ok: false,
+    mensaje: "Error interno del servidor",
+    detalle: err.message,
+  });
+});
+
+// Iniciar servidor
 app.listen(PUERTO, () => {
-  console.log(`🚀 Backend corriendo en puerto ${PUERTO}`);
+  console.log(`🚀 Backend Zentro corriendo en puerto ${PUERTO}`);
 });
